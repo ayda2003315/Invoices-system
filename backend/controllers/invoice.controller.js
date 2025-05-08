@@ -1,5 +1,5 @@
 const Invoice = require('../models/Invoice');
-const User = require('../models/User');
+
 const { sendMail } = require('../utils/sendmail'); // Assure-toi d'importer la fonction d'envoi du mail
 const { processInvoice } = require('../services/ocrGemini.service'); // Si tu utilises ce service pour l'OCR
 
@@ -26,37 +26,51 @@ async function uploadInvoice(req, res) {
     }
 }
 
-// Fonction pour envoyer un rappel de facture
+
+// Contrôleur pour envoyer une alerte simple sur facture en retard ou proche du délai
 async function sendInvoiceReminder(req, res) {
-  const { invoiceId } = req.body;  // L'ID de la facture envoyé dans le corps de la requête
   try {
-    const invoice = await Invoice.findById(invoiceId);  // Récupère la facture depuis la base de données
-    const client = await User.findById(invoice.clientId);  // Récupère le client associé à la facture
+    const { id } = req.params; // on récupère l'ID dans l'URL
 
-    if (!invoice || !client) {
-      return res.status(404).json({ error: 'Facture ou client non trouvé' });
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({ error: "Facture introuvable" });
     }
 
-    // Contenu de l'alerte
-    const subject = 'Rappel de paiement';
-    const text = `Bonjour ${client.name},\n\nVotre facture ${invoice._id} est due bientôt. Montant : ${invoice.total} €.\n\nMerci de procéder au règlement.`;
+    // Vérifie si la facture est en retard ou proche du délai
+    const now = new Date();
+    const dueDate = new Date(invoice.dueDate);
+    const timeDiff = dueDate - now;
+    const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
-    // Alerte affichée dans la console
-    console.log(`Alerte de paiement pour la facture ${invoice._id} envoyée à ${client.name} : ${invoice.total} €`);
-
-    // Alerte en temps réel via WebSocket (si configuré dans l'app)
-    if (req.app.io) {
-      req.app.io.emit('invoice_alert', {
-        message: `Alerte de paiement pour la facture ${invoice._id} : ${invoice.total} €`
-      });
+    if (daysLeft <= 3) {
+      // Envoi de l'alerte via WebSocket
+      if (req.app.io) {
+        req.app.io.emit('invoice_alert', {
+          invoiceId: invoice._id,
+          total: invoice.total,
+          dueDate: invoice.dueDate,
+          message: `⚠️ Facture ${invoice._id} de ${invoice.total} € arrive à échéance dans ${daysLeft} jour(s).`,
+        });
+      }
     }
 
-    // Envoi du mail au client
-    await sendMail(client.email, subject, text);
-    res.status(200).json({ message: 'Email envoyé au client' });
+    res.status(200).json({ message: "✅ Alerte traitée avec succès" });
   } catch (error) {
-    console.error('Erreur lors de l\'envoi du mail :', error);
-    res.status(500).json({ error: 'Erreur serveur lors de l\'envoi du mail' });
+    console.error("Erreur en envoyant l'alerte :", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+}
+
+module.exports = { sendInvoiceReminder };
+
+async function getInvoices(req, res) {
+  try {
+    const query = req.user.role === 'client' ? { clientId: req.user._id } : {};
+    const invoices = await Invoice.find(query);
+    res.json(invoices);
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de la récupération des factures' });
   }
 }
 

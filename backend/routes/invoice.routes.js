@@ -11,6 +11,5 @@ router.post('/upload', upload.single('file'), uploadInvoice);
 router.get('/', getInvoices);
 
 // Route pour envoyer un rappel de facture sans authentification (pas de middleware)
-router.post('/sendInvoiceReminder', sendInvoiceReminder); // Aucune authentification requise ici
-
+router.post('/:id/send-reminder', sendInvoiceReminder); // ✅ AJOUT DE CETTE LIGNE
 module.exports = router;

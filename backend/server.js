@@ -9,6 +9,10 @@ const userRoutes = require('./routes/user.routes');
 const scheduleTasks = require('./utils/scheduler');
 const socketIO = require('socket.io');
 const http = require('http');
+const checkOverdueInvoices = require('./Cron/checkOverdueInvoices');
+
+setInterval(checkOverdueInvoices, 24 * 60 * 60 * 1000); // tous les jours
+
 
 dotenv.config();
 
@@ -38,10 +42,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/invoices', invoiceRoutes); // ✅ Ta route est donc /api/invoices/upload
 
-// Socket.io
-io.on('connection', socket => {
-  console.log('🟢 Socket connecté');
-});
 
+
+
+app.io = io; // 👈 Important pour req.app.io
+
+io.on('connection', (socket) => {
+  console.log('📡 Nouveau client WebSocket connecté');
+});
 // Démarrer serveur
 server.listen(3000, () => console.log('🚀 Serveur lancé sur le port 3000'));
